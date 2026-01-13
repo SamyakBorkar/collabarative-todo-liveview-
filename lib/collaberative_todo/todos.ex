@@ -7,6 +7,13 @@ defmodule CollaberativeTodo.Todos do
   alias CollaberativeTodo.Repo
 
   alias CollaberativeTodo.Todos.Item
+  # 1. Define a Topic name
+  @topic "todos_topic"
+
+  # 2. Allow LiveViews to subscribe to this topic
+  def subscribe do
+    Phoenix.PubSub.subscribe(CollaberativeTodo.PubSub, @topic)
+  end
 
   @doc """
   Returns the list of items.
@@ -53,6 +60,7 @@ defmodule CollaberativeTodo.Todos do
     %Item{}
     |> Item.changeset(attrs)
     |> Repo.insert()
+    |> broadcast_change()
   end
 
   @doc """
@@ -71,6 +79,7 @@ defmodule CollaberativeTodo.Todos do
     item
     |> Item.changeset(attrs)
     |> Repo.update()
+    |> broadcast_change()
   end
 
   @doc """
@@ -101,4 +110,12 @@ defmodule CollaberativeTodo.Todos do
   def change_item(%Item{} = item, attrs \\ %{}) do
     Item.changeset(item, attrs)
   end
+
+  # This helper shouts to everyone listening on the topic
+  defp broadcast_change({:ok, result}) do
+    Phoenix.PubSub.broadcast(CollaberativeTodo.PubSub, @topic, {:todos_updated, result})
+    {:ok, result}
+  end
+
+  defp broadcast_change(error), do: error
 end

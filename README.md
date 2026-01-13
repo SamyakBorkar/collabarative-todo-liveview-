@@ -74,8 +74,50 @@ handle_event("add", params, socket)
 handle_event("toggle", %{"id" => id}, socket)
 ```
 Flow:
-- Form submit -> Todos.create_item/1 -> assign updated list
-- Row click -> Todos.get_item!/1 + Todos.update_item/2 -> assign updated list
+- Form submit → Todos.create_item/1 → assign updated list
+- Row click → Todos.get_item!/1 + Todos.update_item/2 → assign updated list
+
+### Phase 5: Real-Time Collaboration (PubSub)
+We unlocked true multi-user synchronization so changes instantly appear on all connected browsers—no refresh needed.
+
+**Context Layer Changes (todos.ex)**
+```elixir
+# Subscribe a LiveView process to the todos topic
+def subscribe do
+  Phoenix.PubSub.subscribe(CollaberativeTodo.PubSub, "todos_topic")
+end
+
+# Broadcast updates whenever an item changes
+defp broadcast(msg) do
+  Phoenix.PubSub.broadcast(
+    CollaberativeTodo.PubSub,
+    "todos_topic",
+    msg
+  )
+end
+```
+
+**LiveView Layer Changes (todo_live.ex)**
+```elixir
+# Mount: Subscribe when user joins
+def mount(_params, _session, socket) do
+  Todos.subscribe()
+  items = Todos.list_items()
+  {:ok, assign(socket, items: items)}
+end
+
+# Handle: Listen for broadcasts and auto-refresh
+def handle_info({:todos_updated, _item}, socket) do
+  items = Todos.list_items()
+  {:noreply, assign(socket, items: items)}
+end
+```
+
+Flow:
+- User A creates/updates task → broadcast({:todos_updated, item})
+- LiveView process receives via PubSub → handle_info callback triggers
+- All connected users see the change instantly via WebSocket
+- No polling, no manual refresh—true collaborative magic ✨
 
 ---
 
@@ -90,7 +132,38 @@ mix assets.setup
 # Create and migrate the database
 mix ecto.setup
 
-# Start the server
+# Start the server with live reloading
 mix phx.server
 ```
-Visit: http://localhost:4000/todos
+Visit: **http://localhost:4000/todos**
+
+Open in multiple browser tabs/windows to see real-time sync in action!
+
+---
+
+## 📁 Project Structure
+```
+lib/
+├── collaberative_todo/
+│   ├── todos.ex          (context: CRUD + PubSub)
+│   └── todos/
+│       └── item.ex       (schema)
+├── collaberative_todo_web/
+│   ├── live/
+│   │   └── todo_live.ex  (LiveView UI + events + subscriptions)
+│   └── router.ex         (routes)
+assets/
+├── css/
+│   └── app.css          (Tailwind + custom styles)
+└── js/
+    └── app.js            (LiveSocket + hooks)
+```
+
+---
+
+## 🎯 What Makes This Cool
+✨ **Zero JavaScript boilerplate** — LiveView handles interactivity  
+🔄 **PubSub magic** — Multi-user sync with no polling  
+📡 **WebSocket efficiency** — Only deltas sent over the wire  
+🎨 **Beautiful by default** — Tailwind + modern component patterns  
+🚀 **Server-centric** — All logic lives in safe, testable Elixir
